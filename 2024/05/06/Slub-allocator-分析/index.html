@@ -9,39 +9,39 @@
     <meta name="description" content="本文的内核源码分析基于linux-6.8.7版本  OverviewLinux 中内核经常会有需要为各种对象分配内存的场景，但直接用 page allocator 分配的话有浪费和内存碎片的问题，于是出现了 slab allocator 来应对小内存对象的分配需求。slab allocator 基于 cache 的思想。对于内核的每个对象有其对应的 slab cache ，首先 slab all">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Slub allocator 分析">
-<meta property="og:url" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/index.html">
+<meta property="og:url" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/index.html">
 <meta property="og:site_name" content="Slavin&#39;s blog">
 <meta property="og:description" content="本文的内核源码分析基于linux-6.8.7版本  OverviewLinux 中内核经常会有需要为各种对象分配内存的场景，但直接用 page allocator 分配的话有浪费和内存碎片的问题，于是出现了 slab allocator 来应对小内存对象的分配需求。slab allocator 基于 cache 的思想。对于内核的每个对象有其对应的 slab cache ，首先 slab all">
 <meta property="og:locale" content="en_US">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout2.jpg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_layout.jpg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_cache_layout.jpg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmem_cache.png">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc.png">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc_cache.jpeg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_alloc.jpg">
-<meta property="og:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_free.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout2.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_layout.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_cache_layout.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmem_cache.png">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc.png">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc_cache.jpeg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_alloc.jpg">
+<meta property="og:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_free.jpg">
 <meta property="article:published_time" content="2024-05-06T05:58:19.000Z">
 <meta property="article:modified_time" content="2024-05-06T08:17:25.250Z">
 <meta property="article:author" content="Slavin">
 <meta name="twitter:card" content="summary">
-<meta name="twitter:image" content="https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg">
+<meta name="twitter:image" content="https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg">
     
     
       
         
-          <link rel="shortcut icon" href="/project/images/favicon.ico">
+          <link rel="shortcut icon" href="/images/favicon.ico">
         
       
       
         
-          <link rel="icon" type="image/png" href="/project/images/android-chrome-192x192.png" sizes="192x192">
+          <link rel="icon" type="image/png" href="/images/android-chrome-192x192.png" sizes="192x192">
         
       
       
         
-          <link rel="apple-touch-icon" sizes="180x180" href="/project/images/apple-touch-icon.png">
+          <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
         
       
     
@@ -56,7 +56,7 @@
 
     <!-- styles -->
     
-<link rel="stylesheet" href="/project/css/style.css">
+<link rel="stylesheet" href="/css/style.css">
 
     <!-- persian styles -->
     
@@ -77,11 +77,11 @@
     <span id="nav">
       <ul>
         <!--
-       --><li><a href="/project/">Home</a></li><!--
+       --><li><a href="/">Home</a></li><!--
      --><!--
-       --><li><a href="/project/about/">About</a></li><!--
+       --><li><a href="/about/">About</a></li><!--
      --><!--
-       --><li><a href="/project/archives/">Writing</a></li><!--
+       --><li><a href="/archives/">Writing</a></li><!--
      --><!--
        --><li><a target="_blank" rel="noopener" href="https://github.com/slavin-ayu">Projects</a></li><!--
      -->
@@ -103,17 +103,17 @@
     <br/>
     <div id="share" style="display: none">
       <ul>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&text=Slub allocator 分析"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&is_video=false&description=Slub allocator 分析"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
-  <li><a class="icon" href="mailto:?subject=Slub allocator 分析&body=Check out this article: https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fa-solid fa-envelope " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&name=Slub allocator 分析&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&t=Slub allocator 分析"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fab fa-facebook " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&text=Slub allocator 分析"><i class="fab fa-twitter " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-linkedin " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&is_video=false&description=Slub allocator 分析"><i class="fab fa-pinterest " aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=Slub allocator 分析&body=Check out this article: https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fa-solid fa-envelope " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-get-pocket " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-reddit " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-stumbleupon " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-digg " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&name=Slub allocator 分析&description="><i class="fab fa-tumblr " aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&t=Slub allocator 分析"><i class="fab fa-hacker-news " aria-hidden="true"></i></a></li>
 </ul>
 
     </div>
@@ -174,12 +174,12 @@
 </ul>
 <p><strong>本文仅讨论 slub allocator，下文提到的 slab 均指 slub 实现。</strong></p>
 <h3 id="object-slab-layout"><a href="#object-slab-layout" class="headerlink" title="object &amp; slab layout"></a>object &amp; slab layout</h3><p>如果配置了<code>CONFIG_SLUB_DEBUG_ON</code>又配置了<code>CONFIG_KASAN</code>的话，slab 中每个 object 的布局就是这样：  </p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout1.jpg" class title="test">
 <p>本文只讨论不开以上配置的情况（有缘再讨论），那么 object 的布局如下：  </p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout2.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/object_layout2.jpg" class title="test">
 <p>slab 里的所有空闲 object 组织成链表 freelist，free pointer（FP）指向下一个空闲 object 。FP 是内嵌在 object 里的，偏移是<code>kmem_cache-&gt;offset</code>。每个 object 需要加 padding 对齐到 word size 。  </p>
 <p>slab 的布局如下：  </p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_layout.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_layout.jpg" class title="test">
 
 <blockquote>
 <p>正常初始化时 freelist 里 object 是顺序排列，但如果配置了<code>CONFIG_SLAB_FREELIST_RANDOM</code>，就会打乱 object 的顺序</p>
@@ -193,7 +193,7 @@
 <h3 id="struct-slab"><a href="#struct-slab" class="headerlink" title="struct slab"></a>struct slab</h3><p>就像 struct page 对象管理一张 page 一样，一张 slab 由 struct slab 对象管理，因为 slab 本质是单页或复合页，所以 struct slab 复用 struct folio 以及 struct page</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">slab</span> &#123;</span></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> __page_flags;                   <span class="comment">// slab 所处页的相关属性</span></span><br><span class="line"></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">kmem_cache</span> *<span class="title">slab_cache</span>;</span>                <span class="comment">// 指向 slab 所属的 slab cache 的 kmem_cache 对象</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">            <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">                <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">slab_list</span>;</span>       <span class="comment">// slab 在 kmem_cache_node 上以双向链表组织（partial list 或是 full list）</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_SLUB_CPU_PARTIAL</span></span><br><span class="line">                <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">                    <span class="class"><span class="keyword">struct</span> <span class="title">slab</span> *<span class="title">next</span>;</span>            <span class="comment">// slab 在 kmem_cache_cpu-&gt;partial 上以单向链表组织</span></span><br><span class="line">                    <span class="type">int</span> slabs;                    <span class="comment">// slab 在 kmem_cache_cpu-&gt;partial 上时后面 slab 的数量（包括自己）</span></span><br><span class="line">                &#125;;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">            &#125;;</span><br><span class="line">            <span class="comment">/* Double-word boundary */</span></span><br><span class="line">            <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">                <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">                    <span class="type">void</span> *freelist;               <span class="comment">// 指向 slab 内第一个空闲 object</span></span><br><span class="line">                    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">                        <span class="type">unsigned</span> <span class="type">long</span> counters;   <span class="comment">// 注意对 counters 赋值操作就是同时对 inuse objects frozen 赋值</span></span><br><span class="line">                        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">                            <span class="type">unsigned</span> inuse:<span class="number">16</span>;    <span class="comment">// slab 中已分配的 object 数量</span></span><br><span class="line">                            <span class="type">unsigned</span> objects:<span class="number">15</span>;  <span class="comment">// slab 中 object 总数</span></span><br><span class="line">                            <span class="type">unsigned</span> frozen:<span class="number">1</span>;    <span class="comment">// slab 是否是某个 cpu 的 kmem_cache_cpu-&gt;slab</span></span><br><span class="line">                        &#125;;</span><br><span class="line">                    &#125;;</span><br><span class="line">                &#125;;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> system_has_freelist_aba</span></span><br><span class="line">                <span class="type">freelist_aba_t</span> freelist_counter;  <span class="comment">// 用于 cmpxchg128 时同时操作 freelist 和 counters</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">            &#125;;</span><br><span class="line">        &#125;;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span> <span class="title">rcu_head</span>;</span></span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="type">unsigned</span> <span class="type">int</span> __unused;</span><br><span class="line"></span><br><span class="line">    <span class="type">atomic_t</span> __page_refcount;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_MEMCG</span></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> memcg_data;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
 <h3 id="slab-cache-layout"><a href="#slab-cache-layout" class="headerlink" title="slab cache layout"></a>slab cache layout</h3><p>slab cache 的这些 slabs 是如何组织的？接下来看 slab cache 的布局：</p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_cache_layout.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_cache_layout.jpg" class title="test">
 
 <p>slab cache 在每个 cpu 上有个本地缓存，这个本地缓存用 <code>kmem_cache_cpu</code> 对象表示，可以通过 <code>kmem_cache</code> 的 percpu 变量成员 <code>cpu_slab</code> 找到。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">kmem_cache_cpu</span> &#123;</span></span><br><span class="line">    <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line">        <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line">            <span class="type">void</span> **freelist;         <span class="comment">// 指向 kmem_cache_cpu-&gt;slab 上的空闲 object</span></span><br><span class="line">            <span class="type">unsigned</span> <span class="type">long</span> tid;       <span class="comment">// 全局标识</span></span><br><span class="line">        &#125;;</span><br><span class="line">        <span class="type">freelist_aba_t</span> freelist_tid;		</span><br><span class="line">    &#125;;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">slab</span> *<span class="title">slab</span>;</span>               <span class="comment">// 指向当前缓存的 slab</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_SLUB_CPU_PARTIAL</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">slab</span> *<span class="title">partial</span>;</span>            <span class="comment">// 备用 slab 列表</span></span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">    <span class="type">local_lock_t</span> lock;	<span class="comment">/* Protects the fields above */</span></span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_SLUB_STATS</span></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">int</span> stat[NR_SLUB_STAT_ITEMS];</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
@@ -217,10 +217,10 @@
 <p>虽然 <code>kmem_cache_cpu</code>和<code>kmem_cache_node</code>的 slab 池都叫 “ partial list ” 但其实上面的 slab 可以是半空的也可以是全空的</p>
 </blockquote>
 <h2 id="Allocate-an-object"><a href="#Allocate-an-object" class="headerlink" title="Allocate an object"></a>Allocate an object</h2><h3 id="上层-API"><a href="#上层-API" class="headerlink" title="上层 API"></a>上层 API</h3><p>内核会为核心对象创建专属 slab cache ，例如:</p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmem_cache.png" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmem_cache.png" class title="test">
 <p>每个不同的 slab cache 分别由<code>kmem_cache</code>对象管理，当内核需要分配对象时就会从其专属的 slab cache 中取  </p>
 <p>除了专属 slab cache 以外，内核还准备了尺寸从 8 到 8K 字节的通用 slab cache：</p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc.png" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc.png" class title="test">
 <p>这是因为内核还经常有分配通用内存块的需求，就会从合适尺寸的通用 slab cache 中取</p>
 <h4 id="kmem-cache-alloc-系列"><a href="#kmem-cache-alloc-系列" class="headerlink" title="kmem_cache_alloc() 系列"></a><em>kmem_cache_alloc()</em> 系列</h4><p>从专属 slab cache 中分配的 API 是<code>kmem_cache_alloc()</code>：</p>
 <blockquote>
@@ -239,7 +239,7 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// &gt;&gt;&gt; linux-6.8.7/mm/slub.c:4005</span></span><br><span class="line"><span class="comment">/* 4005 */</span> <span class="type">void</span> *<span class="title function_">kmalloc_trace</span><span class="params">(<span class="keyword">struct</span> kmem_cache *s, <span class="type">gfp_t</span> gfpflags, <span class="type">size_t</span> size)</span></span><br><span class="line"><span class="comment">/* 4006 */</span> &#123;</span><br><span class="line"><span class="comment">/* 4007 */</span>     <span class="type">void</span> *ret = slab_alloc_node(s, <span class="literal">NULL</span>, gfpflags, NUMA_NO_NODE,</span><br><span class="line"><span class="comment">/* 4008 */</span>                         _RET_IP_, size);</span><br><span class="line">------</span><br><span class="line"><span class="comment">/* 4013 */</span>     <span class="keyword">return</span> ret;</span><br><span class="line"><span class="comment">/* 4014 */</span> &#125;</span><br></pre></td></tr></table></figure>
 <p><code>kmalloc()</code>和<code>kmem_cache_alloc()</code>一样最后都会调用到<code>slab_alloc_node()</code>使用底层 slab allocator ，但在那之前<code>kmalloc()</code>的首要任务是通过参数<code>size</code>和<code>gfpflags</code>来确定到底应该从哪个 slab cache 中分配  </p>
 <p><code>kmalloc()</code>的内存池有以下 slab cache：</p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc_cache.jpeg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/kmalloc_cache.jpeg" class title="test">
 
 <p><code>kmalloc()</code>根据<code>gfpflags</code>判断 slab cache 类型：（如果同时指定了多个 flag 就按以下优先级顺序）</p>
 <ul>
@@ -322,7 +322,7 @@
 到<code>retry_load_slab</code>处，如果<code>kmem_cache_cpu</code>上本来缓存了 slab ，则要先调用<code>deactivate_slab()</code>将旧 slab 从<code>kmem_cache_cpu</code>上移除，令新 slab 作为<code>kmem_cache_cpu-&gt;slab</code>并跳转到 <code>load_freelist</code>取空闲 object<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// &gt;&gt;&gt; linux-6.8.7/mm/slub.c:3582</span></span><br><span class="line"><span class="comment">/* 3582 */</span> retry_load_slab:</span><br><span class="line"><span class="comment">/* 3583 */</span>      </span><br><span class="line"><span class="comment">/* 3584 */</span>     local_lock_irqsave(&amp;s-&gt;cpu_slab-&gt;lock, flags);</span><br><span class="line"><span class="comment">/* 3585 */</span>     <span class="keyword">if</span> (unlikely(c-&gt;slab)) &#123;</span><br><span class="line"><span class="comment">/* 3586 */</span>         <span class="type">void</span> *flush_freelist = c-&gt;freelist;</span><br><span class="line"><span class="comment">/* 3587 */</span>         <span class="class"><span class="keyword">struct</span> <span class="title">slab</span> *<span class="title">flush_slab</span> =</span> c-&gt;slab;</span><br><span class="line"><span class="comment">/* 3588 */</span>      </span><br><span class="line"><span class="comment">/* 3589 */</span>         c-&gt;slab = <span class="literal">NULL</span>;</span><br><span class="line"><span class="comment">/* 3590 */</span>         c-&gt;freelist = <span class="literal">NULL</span>;</span><br><span class="line"><span class="comment">/* 3591 */</span>         c-&gt;tid = next_tid(c-&gt;tid);</span><br><span class="line"><span class="comment">/* 3592 */</span>      </span><br><span class="line"><span class="comment">/* 3593 */</span>         local_unlock_irqrestore(&amp;s-&gt;cpu_slab-&gt;lock, flags);</span><br><span class="line"><span class="comment">/* 3594 */</span>      </span><br><span class="line"><span class="comment">/* 3595 */</span>         deactivate_slab(s, flush_slab, flush_freelist);</span><br><span class="line"><span class="comment">/* 3596 */</span>      </span><br><span class="line"><span class="comment">/* 3597 */</span>         stat(s, CPUSLAB_FLUSH);</span><br><span class="line"><span class="comment">/* 3598 */</span>      </span><br><span class="line"><span class="comment">/* 3599 */</span>         <span class="keyword">goto</span> retry_load_slab;</span><br><span class="line"><span class="comment">/* 3600 */</span>     &#125;</span><br><span class="line"><span class="comment">/* 3601 */</span>     c-&gt;slab = slab;</span><br><span class="line"><span class="comment">/* 3602 */</span>      </span><br><span class="line"><span class="comment">/* 3603 */</span>     <span class="keyword">goto</span> load_freelist;</span><br><span class="line"><span class="comment">/* 3604 */</span> &#125;</span><br></pre></td></tr></table></figure></li>
 </ul>
 <h3 id="全流程"><a href="#全流程" class="headerlink" title="全流程"></a>全流程</h3><p>总结一下 slab allocator 中对象分配的全流程：  </p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_alloc.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_alloc.jpg" class title="test">
 
 <h2 id="Free-an-object"><a href="#Free-an-object" class="headerlink" title="Free an object"></a>Free an object</h2><h3 id="上层-API-1"><a href="#上层-API-1" class="headerlink" title="上层 API"></a>上层 API</h3><ul>
 <li><code>kfree()</code>用于释放任意对象</li>
@@ -373,7 +373,7 @@
 <code>slab_empty</code>处理把 empty slab 还给 buddy system 的场景<br>首先将 slab 从原所在的 list 上移除（<code>kmem_cache_node-&gt;partial</code>或<code>kmem_cache_node-&gt;full</code>），然后调用<code>discard_slab()</code>最后调用<code>__free_pages()</code>释放回 buddy system<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// &gt;&gt;&gt; linux-6.8.7/mm/slub.c:4197</span></span><br><span class="line"><span class="comment">/* 4197 */</span> slab_empty:</span><br><span class="line"><span class="comment">/* 4198 */</span>     <span class="keyword">if</span> (prior) &#123;</span><br><span class="line">------</span><br><span class="line"><span class="comment">/* 4202 */</span>         remove_partial(n, slab);</span><br><span class="line"><span class="comment">/* 4203 */</span>         stat(s, FREE_REMOVE_PARTIAL);</span><br><span class="line"><span class="comment">/* 4204 */</span>     &#125; <span class="keyword">else</span> &#123;</span><br><span class="line"><span class="comment">/* 4205 */</span>         <span class="comment">/* Slab must be on the full list */</span></span><br><span class="line"><span class="comment">/* 4206 */</span>         remove_full(s, n, slab);</span><br><span class="line"><span class="comment">/* 4207 */</span>     &#125;</span><br><span class="line"><span class="comment">/* 4208 */</span> </span><br><span class="line"><span class="comment">/* 4209 */</span>     spin_unlock_irqrestore(&amp;n-&gt;list_lock, flags);</span><br><span class="line"><span class="comment">/* 4210 */</span>     stat(s, FREE_SLAB);</span><br><span class="line"><span class="comment">/* 4211 */</span>     discard_slab(s, slab);</span><br><span class="line"><span class="comment">/* 4212 */</span> &#125;</span><br></pre></td></tr></table></figure></li>
 </ul>
 <h3 id="全流程-1"><a href="#全流程-1" class="headerlink" title="全流程"></a>全流程</h3><p>总结一下 slab allocator 中对象释放的全流程：  </p>
-<img src="/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_free.jpg" class title="test">
+<img src="/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/slab_free.jpg" class title="test">
   </div>
 </article>
 
@@ -386,11 +386,11 @@
     <div id="nav-footer" style="display: none">
       <ul>
         
-          <li><a href="/project/">Home</a></li>
+          <li><a href="/">Home</a></li>
         
-          <li><a href="/project/about/">About</a></li>
+          <li><a href="/about/">About</a></li>
         
-          <li><a href="/project/archives/">Writing</a></li>
+          <li><a href="/archives/">Writing</a></li>
         
           <li><a target="_blank" rel="noopener" href="https://github.com/slavin-ayu">Projects</a></li>
         
@@ -406,17 +406,17 @@
 
     <div id="share-footer" style="display: none">
       <ul>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&text=Slub allocator 分析"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&is_video=false&description=Slub allocator 分析"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" href="mailto:?subject=Slub allocator 分析&body=Check out this article: https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fa-solid fa-envelope fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&name=Slub allocator 分析&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
-  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://slavin-ayu.github.io/project/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&t=Slub allocator 分析"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.facebook.com/sharer.php?u=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fab fa-facebook fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://twitter.com/share?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&text=Slub allocator 分析"><i class="fab fa-twitter fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.linkedin.com/shareArticle?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-linkedin fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://pinterest.com/pin/create/bookmarklet/?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&is_video=false&description=Slub allocator 分析"><i class="fab fa-pinterest fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" href="mailto:?subject=Slub allocator 分析&body=Check out this article: https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/"><i class="fa-solid fa-envelope fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://getpocket.com/save?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-get-pocket fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://reddit.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-reddit fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.stumbleupon.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-stumbleupon fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://digg.com/submit?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&title=Slub allocator 分析"><i class="fab fa-digg fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="http://www.tumblr.com/share/link?url=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&name=Slub allocator 分析&description="><i class="fab fa-tumblr fa-lg" aria-hidden="true"></i></a></li>
+  <li><a class="icon" target="_blank" rel="noopener" href="https://news.ycombinator.com/submitlink?u=https://slavin.cn/2024/05/06/Slub-allocator-%E5%88%86%E6%9E%90/&t=Slub allocator 分析"><i class="fab fa-hacker-news fa-lg" aria-hidden="true"></i></a></li>
 </ul>
 
     </div>
@@ -446,11 +446,11 @@
     <nav>
       <ul>
         <!--
-       --><li><a href="/project/">Home</a></li><!--
+       --><li><a href="/">Home</a></li><!--
      --><!--
-       --><li><a href="/project/about/">About</a></li><!--
+       --><li><a href="/about/">About</a></li><!--
      --><!--
-       --><li><a href="/project/archives/">Writing</a></li><!--
+       --><li><a href="/archives/">Writing</a></li><!--
      --><!--
        --><li><a target="_blank" rel="noopener" href="https://github.com/slavin-ayu">Projects</a></li><!--
      -->
@@ -500,7 +500,7 @@
   </script>
 
 
-<script src="/project/js/main.js"></script>
+<script src="/js/main.js"></script>
 
 <!-- search -->
 
